@@ -1,11 +1,11 @@
 {
-	"name": "lvgl",
-	"version": "8.4.0",
+	"name": "lvgl-cookie987",
+	"version": "8.4.1",
 	"keywords": "graphics, gui, embedded, tft, lvgl",
-	"description": "Graphics library to create embedded GUI with easy-to-use graphical elements, beautiful visual effects and low memory footprint. It offers anti-aliasing, opacity, and animations using only one frame buffer.",
+	"description": "LVGL改版，尝试解决中文输入法问题。",
 	"repository": {
 		"type": "git",
-		"url": "https://github.com/lvgl/lvgl.git"
+		"url": "https://github.com/cookie987/lvgl.git"
 	},
 	"build": {
 		"includeDir": "."

@@ -45,6 +45,7 @@ enum {
     LV_KEYBOARD_MODE_USER_2,
     LV_KEYBOARD_MODE_USER_3,
     LV_KEYBOARD_MODE_USER_4,
+    LV_KEYBOARD_MODE_IME_CHN,
 };
 typedef uint8_t lv_keyboard_mode_t;
 
@@ -54,6 +55,13 @@ typedef struct {
     lv_obj_t * ta;              /*Pointer to the assigned text area*/
     lv_keyboard_mode_t mode;    /*Key map type*/
     uint8_t popovers : 1;       /*Show button titles in popovers on press*/
+    /* IME CHN specific */
+    char pinyin_buf[16];        /*Buffer for pinyin input*/
+    lv_obj_t * candidate_list;  /*Pointer to candidate list object*/
+    lv_obj_t * candidate_btnm;  /*Button matrix for candidates*/
+    uint8_t candidate_cnt;      /*Number of candidates currently shown*/
+    const char ** candidate_map; /*Dynamically allocated map for candidates*/
+    uint16_t pinyin_start_pos;  /*Start position of pinyin in text area*/
 } lv_keyboard_t;
 
 extern const lv_obj_class_t lv_keyboard_class;
@@ -86,6 +94,13 @@ void lv_keyboard_set_textarea(lv_obj_t * kb, lv_obj_t * ta);
  * @param mode the mode from 'lv_keyboard_mode_t'
  */
 void lv_keyboard_set_mode(lv_obj_t * kb, lv_keyboard_mode_t mode);
+
+/**
+ * Set the candidate list object for IME CHN mode
+ * @param kb pointer to a Keyboard object
+ * @param list pointer to the candidate list object
+ */
+void lv_keyboard_set_candidate_list(lv_obj_t * kb, lv_obj_t * list);
 
 /**
  * Show the button title in a popover when pressed.

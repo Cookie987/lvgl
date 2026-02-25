@@ -20,10 +20,26 @@ LVGL provides everything you need to create an embedded GUI with easy-to-use gra
 
 ---
 
+ime使用方法：
+
+```c++
+lv_obj_t * kb = keyboard_message_input;
+lv_keyboard_set_mode(kb, LV_KEYBOARD_MODE_IME_CHN);
+lv_obj_t * list = id(obj_message_candidate_list); // lv_obj, core widget
+lv_keyboard_set_candidate_list(kb, list);
+```
+
+---
+
 #### Table of content
 - [Overview](#overview)
+  - [Features](#features)
+  - [Requirements](#requirements)
+  - [Supported platforms](#supported-platforms)
 - [Get started](#get-started)
 - [Examples](#examples)
+  - [C](#c)
+  - [Micropython](#micropython)
 - [Services](#services)
 - [Contributing](#contributing)
 

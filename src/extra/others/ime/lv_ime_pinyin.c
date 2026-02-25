@@ -43,6 +43,11 @@ static void pinyin_ime_clear_data(lv_obj_t * obj);
     static void pinyin_k9_cand_page_proc(lv_obj_t * obj, uint16_t dir);
 #endif
 
+static void ui_ime_constructor(const lv_obj_class_t * class_p, lv_obj_t * obj);
+static void ui_ime_keyboard_event_cb(lv_event_t * e);
+static void ui_ime_cand_panel_event_cb(lv_event_t * e);
+static void ui_ime_input_proc(lv_obj_t * obj);
+
 /**********************
  *  STATIC VARIABLES
  **********************/
@@ -54,6 +59,15 @@ const lv_obj_class_t lv_ime_pinyin_class = {
     .group_def      = LV_OBJ_CLASS_GROUP_DEF_TRUE,
     .instance_size  = sizeof(lv_ime_pinyin_t),
     .base_class     = &lv_obj_class
+};
+
+const lv_obj_class_t ui_ime_class = {
+    .constructor_cb = ui_ime_constructor,
+    .width_def = LV_PCT(100),
+    .height_def = LV_PCT(50),
+    .instance_size = sizeof(ui_ime_t),
+    .editable = 1,
+    .base_class = &lv_obj_class
 };
 
 #if LV_IME_PINYIN_USE_K9_MODE
@@ -712,10 +726,10 @@ static void lv_ime_pinyin_kb_event(lv_event_t * e)
         }
         else if(strcmp(txt, LV_SYMBOL_KEYBOARD) == 0) {
             if(pinyin_ime->mode == LV_IME_PINYIN_MODE_K26) {
-                lv_ime_pinyin_set_mode(pinyin_ime, LV_IME_PINYIN_MODE_K9);
+                lv_ime_pinyin_set_mode(obj, LV_IME_PINYIN_MODE_K9);
             }
             else {
-                lv_ime_pinyin_set_mode(pinyin_ime, LV_IME_PINYIN_MODE_K26);
+                lv_ime_pinyin_set_mode(obj, LV_IME_PINYIN_MODE_K26);
                 lv_keyboard_set_mode(pinyin_ime->kb, LV_KEYBOARD_MODE_TEXT_LOWER);
             }
             pinyin_ime_clear_data(obj);

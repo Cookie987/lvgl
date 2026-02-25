@@ -14,6 +14,8 @@
 #include "../../../misc/lv_assert.h"
 
 #include <stdlib.h>
+#include <ctype.h>
+#include <string.h>
 
 /*********************
  *      DEFINES
@@ -34,6 +36,16 @@ static void lv_keyboard_update_map(lv_obj_t * obj);
 
 static void lv_keyboard_update_ctrl_map(lv_obj_t * obj);
 
+static void lv_keyboard_handle_ime_chn(lv_keyboard_t * keyboard, const char * txt);
+
+static void lv_keyboard_show_candidates(lv_keyboard_t * keyboard);
+
+static void lv_keyboard_clear_candidates(lv_keyboard_t * keyboard);
+
+static void lv_keyboard_select_candidate(lv_keyboard_t * keyboard, int idx);
+
+static void lv_keyboard_candidate_event_cb(lv_event_t * e);
+
 /**********************
  *  STATIC VARIABLES
  **********************/
@@ -46,36 +58,90 @@ const lv_obj_class_t lv_keyboard_class = {
     .base_class = &lv_btnmatrix_class
 };
 
+static const char * const ime_chn_kb_map[] = {"1#", "q", "w", "e", "r", "t", "y", "u", "i", "o", "p", LV_SYMBOL_BACKSPACE, "\n",
+                                                "ABC", "a", "s", "d", "f", "g", "h", "j", "k", "l", LV_SYMBOL_NEW_LINE, "\n",
+                                                "_", "-", "z", "x", "c", "v", "b", "n", "m", "。", "，", "：", "\n",
+                                                LV_SYMBOL_KEYBOARD, "中",LV_SYMBOL_LEFT, "拼音", LV_SYMBOL_RIGHT, LV_SYMBOL_OK, ""
+                                                };
+static const lv_btnmatrix_ctrl_t ime_kb_ctrl_chn_map[] = {
+    LV_KEYBOARD_CTRL_BTN_FLAGS | 5, LV_KB_BTN(4), LV_KB_BTN(4), LV_KB_BTN(4), LV_KB_BTN(4), LV_KB_BTN(4), LV_KB_BTN(4), LV_KB_BTN(4), LV_KB_BTN(4), LV_KB_BTN(4), LV_KB_BTN(4), LV_BTNMATRIX_CTRL_CHECKED | 7,
+    LV_KEYBOARD_CTRL_BTN_FLAGS | 6, LV_KB_BTN(3), LV_KB_BTN(3), LV_KB_BTN(3), LV_KB_BTN(3), LV_KB_BTN(3), LV_KB_BTN(3), LV_KB_BTN(3), LV_KB_BTN(3), LV_KB_BTN(3), LV_BTNMATRIX_CTRL_CHECKED | 7,
+    LV_BTNMATRIX_CTRL_CHECKED | LV_KB_BTN(1), LV_BTNMATRIX_CTRL_CHECKED | LV_KB_BTN(1), LV_KB_BTN(1), LV_KB_BTN(1), LV_KB_BTN(1), LV_KB_BTN(1), LV_KB_BTN(1), LV_KB_BTN(1), LV_KB_BTN(1), LV_BTNMATRIX_CTRL_CHECKED | LV_KB_BTN(1), LV_BTNMATRIX_CTRL_CHECKED | LV_KB_BTN(1), LV_BTNMATRIX_CTRL_CHECKED | LV_KB_BTN(1),
+    LV_KEYBOARD_CTRL_BTN_FLAGS | 2, LV_KEYBOARD_CTRL_BTN_FLAGS | 2, LV_BTNMATRIX_CTRL_CHECKED | 2, 6, LV_BTNMATRIX_CTRL_CHECKED | 2, LV_KEYBOARD_CTRL_BTN_FLAGS | 2
+};
+
+/* Simple Pinyin to Chinese dictionary - example entries */
+typedef struct {
+    const char * pinyin;
+    const char * chinese;
+} pinyin_entry_t;
+
+static const pinyin_entry_t pinyin_dict[] = {
+    {"ni", "你"},
+    {"ni", "逆"},
+    {"ni", "尼"},
+    {"ni", "泥"},
+    {"hao", "好"},
+    {"shi", "是"},
+    {"shi", "世"},
+    {"jie", "界"},
+    {"wo", "我"},
+    {"ta", "他"},
+    {"she", "她"},
+    {"zai", "在"},
+    {"de", "的"},
+    {"le", "了"},
+    {"yi", "一"},
+    {"bu", "不"},
+    {"ren", "人"},
+    {"dao", "到"},
+    {"lai", "来"},
+    {"gei", "给"},
+    {"zai", "再"},
+    {"wei", "为"},
+    {"er", "而"},
+    {"da", "大"},
+    {"xiao", "小"},
+    {"chu", "出"},
+    {"chu", "初"},
+    {"chu", "楚"},
+    {"chu", "触"},
+    {"chu", "厨"},
+    {"chu", "除"},
+    {NULL, NULL}  // End marker
+};
+
+
 static const char * const default_kb_map_lc[] = {"1#", "q", "w", "e", "r", "t", "y", "u", "i", "o", "p", LV_SYMBOL_BACKSPACE, "\n",
-                                                 "ABC", "a", "s", "d", "f", "g", "h", "j", "k", "l", LV_SYMBOL_NEW_LINE, "\n",
-                                                 "_", "-", "z", "x", "c", "v", "b", "n", "m", ".", ",", ":", "\n",
-                                                 LV_SYMBOL_KEYBOARD, LV_SYMBOL_LEFT, " ", LV_SYMBOL_RIGHT, LV_SYMBOL_OK, ""
+                                                "ABC", "a", "s", "d", "f", "g", "h", "j", "k", "l", LV_SYMBOL_NEW_LINE, "\n",
+                                                "_", "-", "z", "x", "c", "v", "b", "n", "m", ".", ",", ":", "\n",
+                                                LV_SYMBOL_KEYBOARD, "英", LV_SYMBOL_LEFT, "QWERTY", LV_SYMBOL_RIGHT, LV_SYMBOL_OK, ""
                                                 };
 
 static const lv_btnmatrix_ctrl_t default_kb_ctrl_lc_map[] = {
     LV_KEYBOARD_CTRL_BTN_FLAGS | 5, LV_KB_BTN(4), LV_KB_BTN(4), LV_KB_BTN(4), LV_KB_BTN(4), LV_KB_BTN(4), LV_KB_BTN(4), LV_KB_BTN(4), LV_KB_BTN(4), LV_KB_BTN(4), LV_KB_BTN(4), LV_BTNMATRIX_CTRL_CHECKED | 7,
     LV_KEYBOARD_CTRL_BTN_FLAGS | 6, LV_KB_BTN(3), LV_KB_BTN(3), LV_KB_BTN(3), LV_KB_BTN(3), LV_KB_BTN(3), LV_KB_BTN(3), LV_KB_BTN(3), LV_KB_BTN(3), LV_KB_BTN(3), LV_BTNMATRIX_CTRL_CHECKED | 7,
     LV_BTNMATRIX_CTRL_CHECKED | LV_KB_BTN(1), LV_BTNMATRIX_CTRL_CHECKED | LV_KB_BTN(1), LV_KB_BTN(1), LV_KB_BTN(1), LV_KB_BTN(1), LV_KB_BTN(1), LV_KB_BTN(1), LV_KB_BTN(1), LV_KB_BTN(1), LV_BTNMATRIX_CTRL_CHECKED | LV_KB_BTN(1), LV_BTNMATRIX_CTRL_CHECKED | LV_KB_BTN(1), LV_BTNMATRIX_CTRL_CHECKED | LV_KB_BTN(1),
-    LV_KEYBOARD_CTRL_BTN_FLAGS | 2, LV_BTNMATRIX_CTRL_CHECKED | 2, 6, LV_BTNMATRIX_CTRL_CHECKED | 2, LV_KEYBOARD_CTRL_BTN_FLAGS | 2
+    LV_KEYBOARD_CTRL_BTN_FLAGS | 2, LV_KEYBOARD_CTRL_BTN_FLAGS | 2, LV_BTNMATRIX_CTRL_CHECKED | 2, 6, LV_BTNMATRIX_CTRL_CHECKED | 2, LV_KEYBOARD_CTRL_BTN_FLAGS | 2
 };
 
 static const char * const default_kb_map_uc[] = {"1#", "Q", "W", "E", "R", "T", "Y", "U", "I", "O", "P", LV_SYMBOL_BACKSPACE, "\n",
                                                  "abc", "A", "S", "D", "F", "G", "H", "J", "K", "L", LV_SYMBOL_NEW_LINE, "\n",
                                                  "_", "-", "Z", "X", "C", "V", "B", "N", "M", ".", ",", ":", "\n",
-                                                 LV_SYMBOL_KEYBOARD, LV_SYMBOL_LEFT, " ", LV_SYMBOL_RIGHT, LV_SYMBOL_OK, ""
+                                                 LV_SYMBOL_KEYBOARD, "英", LV_SYMBOL_LEFT, "QWERTY", LV_SYMBOL_RIGHT, LV_SYMBOL_OK, ""
                                                 };
 
 static const lv_btnmatrix_ctrl_t default_kb_ctrl_uc_map[] = {
     LV_KEYBOARD_CTRL_BTN_FLAGS | 5, LV_KB_BTN(4), LV_KB_BTN(4), LV_KB_BTN(4), LV_KB_BTN(4), LV_KB_BTN(4), LV_KB_BTN(4), LV_KB_BTN(4), LV_KB_BTN(4), LV_KB_BTN(4), LV_KB_BTN(4), LV_BTNMATRIX_CTRL_CHECKED | 7,
     LV_KEYBOARD_CTRL_BTN_FLAGS | 6, LV_KB_BTN(3), LV_KB_BTN(3), LV_KB_BTN(3), LV_KB_BTN(3), LV_KB_BTN(3), LV_KB_BTN(3), LV_KB_BTN(3), LV_KB_BTN(3), LV_KB_BTN(3), LV_BTNMATRIX_CTRL_CHECKED | 7,
     LV_BTNMATRIX_CTRL_CHECKED | LV_KB_BTN(1), LV_BTNMATRIX_CTRL_CHECKED | LV_KB_BTN(1), LV_KB_BTN(1), LV_KB_BTN(1), LV_KB_BTN(1), LV_KB_BTN(1), LV_KB_BTN(1), LV_KB_BTN(1), LV_KB_BTN(1), LV_BTNMATRIX_CTRL_CHECKED | LV_KB_BTN(1), LV_BTNMATRIX_CTRL_CHECKED | LV_KB_BTN(1), LV_BTNMATRIX_CTRL_CHECKED | LV_KB_BTN(1),
-    LV_KEYBOARD_CTRL_BTN_FLAGS | 2, LV_BTNMATRIX_CTRL_CHECKED | 2, 6, LV_BTNMATRIX_CTRL_CHECKED | 2, LV_KEYBOARD_CTRL_BTN_FLAGS | 2
+    LV_KEYBOARD_CTRL_BTN_FLAGS | 2, LV_KEYBOARD_CTRL_BTN_FLAGS | 2, LV_BTNMATRIX_CTRL_CHECKED | 2, 6, LV_BTNMATRIX_CTRL_CHECKED | 2, LV_KEYBOARD_CTRL_BTN_FLAGS | 2
 };
 
 static const char * const default_kb_map_spec[] = {"1", "2", "3", "4", "5", "6", "7", "8", "9", "0", LV_SYMBOL_BACKSPACE, "\n",
                                                    "abc", "+", "&", "/", "*", "=", "%", "!", "?", "#", "<", ">", "\n",
                                                    "\\",  "@", "$", "(", ")", "{", "}", "[", "]", ";", "\"", "'", "\n",
-                                                   LV_SYMBOL_KEYBOARD, LV_SYMBOL_LEFT, " ", LV_SYMBOL_RIGHT, LV_SYMBOL_OK, ""
+                                                   LV_SYMBOL_KEYBOARD, LV_SYMBOL_LEFT, "符号", LV_SYMBOL_RIGHT, LV_SYMBOL_OK, ""
                                                   };
 
 static const lv_btnmatrix_ctrl_t default_kb_ctrl_spec_map[] = {
@@ -98,7 +164,7 @@ static const lv_btnmatrix_ctrl_t default_kb_ctrl_num_map[] = {
     1, 1, 1, 1, 1
 };
 
-static const char * * kb_map[9] = {
+static const char * * kb_map[10] = {
     (const char * *)default_kb_map_lc,
     (const char * *)default_kb_map_uc,
     (const char * *)default_kb_map_spec,
@@ -107,9 +173,10 @@ static const char * * kb_map[9] = {
     (const char * *)default_kb_map_lc,
     (const char * *)default_kb_map_lc,
     (const char * *)default_kb_map_lc,
+    (const char * *)ime_chn_kb_map,
     (const char * *)NULL,
 };
-static const lv_btnmatrix_ctrl_t * kb_ctrl[9] = {
+static const lv_btnmatrix_ctrl_t * kb_ctrl[10] = {
     default_kb_ctrl_lc_map,
     default_kb_ctrl_uc_map,
     default_kb_ctrl_spec_map,
@@ -118,6 +185,7 @@ static const lv_btnmatrix_ctrl_t * kb_ctrl[9] = {
     default_kb_ctrl_lc_map,
     default_kb_ctrl_lc_map,
     default_kb_ctrl_lc_map,
+    ime_kb_ctrl_chn_map,
     NULL,
 };
 
@@ -185,7 +253,24 @@ void lv_keyboard_set_mode(lv_obj_t * obj, lv_keyboard_mode_t mode)
     if(keyboard->mode == mode) return;
 
     keyboard->mode = mode;
+    keyboard->pinyin_buf[0] = '\0';  // Clear pinyin buffer
+    lv_keyboard_clear_candidates(keyboard);
     lv_keyboard_update_map(obj);
+}
+
+/**
+ * Set the candidate list object for IME CHN mode
+ * @param obj pointer to a Keyboard object
+ * @param list pointer to the candidate list object
+ */
+void lv_keyboard_set_candidate_list(lv_obj_t * obj, lv_obj_t * list)
+{
+    LV_ASSERT_OBJ(obj, MY_CLASS);
+
+    lv_keyboard_t * keyboard = (lv_keyboard_t *)obj;
+    keyboard->candidate_list = list;
+    /* Ensure candidate_btnm is NULL initially */
+    keyboard->candidate_btnm = NULL;
 }
 
 /**
@@ -289,12 +374,45 @@ void lv_keyboard_def_event_cb(lv_event_t * e)
         return;
     }
     else if(strcmp(txt, "ABC") == 0) {
+        // 切换走的时候先清除拼音输入buffer
+        if(keyboard->mode == LV_KEYBOARD_MODE_IME_CHN && keyboard->pinyin_buf[0] != '\0') {
+            // Delete pinyin buffer
+            keyboard->pinyin_buf[0] = '\0';
+            // 无需删除textarea里的字符，按下enter时应当保留它们在输入框中
+            lv_keyboard_clear_candidates(keyboard);
+        }
         keyboard->mode = LV_KEYBOARD_MODE_TEXT_UPPER;
         lv_btnmatrix_set_map(obj, kb_map[LV_KEYBOARD_MODE_TEXT_UPPER]);
         lv_keyboard_update_ctrl_map(obj);
         return;
     }
+    else if(strcmp(txt, "英") == 0) {
+        keyboard->mode = LV_KEYBOARD_MODE_IME_CHN;
+        lv_btnmatrix_set_map(obj, kb_map[LV_KEYBOARD_MODE_IME_CHN]);
+        lv_keyboard_update_ctrl_map(obj);
+        return;
+    }
+    else if(strcmp(txt, "中") == 0) {
+        // 切换走的时候先清除拼音输入buffer
+        if(keyboard->mode == LV_KEYBOARD_MODE_IME_CHN && keyboard->pinyin_buf[0] != '\0') {
+            // Delete pinyin buffer
+            keyboard->pinyin_buf[0] = '\0';
+            // 无需删除textarea里的字符，按下enter时应当保留它们在输入框中
+            lv_keyboard_clear_candidates(keyboard);
+        }
+        keyboard->mode = LV_KEYBOARD_MODE_TEXT_LOWER;
+        lv_btnmatrix_set_map(obj, kb_map[LV_KEYBOARD_MODE_TEXT_LOWER]);
+        lv_keyboard_update_ctrl_map(obj);
+        return;
+    }
     else if(strcmp(txt, "1#") == 0) {
+        // 切换走的时候先清除拼音输入buffer
+        if(keyboard->mode == LV_KEYBOARD_MODE_IME_CHN && keyboard->pinyin_buf[0] != '\0') {
+            // Delete pinyin buffer
+            keyboard->pinyin_buf[0] = '\0';
+            // 无需删除textarea里的字符，按下enter时应当保留它们在输入框中
+            lv_keyboard_clear_candidates(keyboard);
+        }
         keyboard->mode = LV_KEYBOARD_MODE_SPECIAL;
         lv_btnmatrix_set_map(obj, kb_map[LV_KEYBOARD_MODE_SPECIAL]);
         lv_keyboard_update_ctrl_map(obj);
@@ -325,6 +443,14 @@ void lv_keyboard_def_event_cb(lv_event_t * e)
     if(keyboard->ta == NULL) return;
 
     if(strcmp(txt, "Enter") == 0 || strcmp(txt, LV_SYMBOL_NEW_LINE) == 0) {
+        if(keyboard->mode == LV_KEYBOARD_MODE_IME_CHN && keyboard->pinyin_buf[0] != '\0') {
+            // Delete pinyin buffer
+            keyboard->pinyin_buf[0] = '\0';
+            // 无需删除textarea里的字符，按下enter时应当保留它们在输入框中
+            lv_keyboard_clear_candidates(keyboard);
+            // 直接返回
+            return;
+        }
         lv_textarea_add_char(keyboard->ta, '\n');
         if(lv_textarea_get_one_line(keyboard->ta)) {
             lv_res_t res = lv_event_send(keyboard->ta, LV_EVENT_READY, NULL);
@@ -338,7 +464,27 @@ void lv_keyboard_def_event_cb(lv_event_t * e)
         lv_textarea_cursor_right(keyboard->ta);
     }
     else if(strcmp(txt, LV_SYMBOL_BACKSPACE) == 0) {
-        lv_textarea_del_char(keyboard->ta);
+        if(keyboard->mode == LV_KEYBOARD_MODE_IME_CHN && keyboard->pinyin_buf[0] != '\0') {
+            // Delete from pinyin buffer
+            size_t len = strlen(keyboard->pinyin_buf);
+            if(len > 0) {
+                keyboard->pinyin_buf[len - 1] = '\0';
+            }
+            // 因为拼音也显示在了textarea里，所以删除时也要删除textarea里的字符
+            lv_textarea_del_char(keyboard->ta);
+            lv_keyboard_clear_candidates(keyboard);
+        } else {
+            lv_textarea_del_char(keyboard->ta);
+        }
+    }
+    else if(strcmp(txt, "QWERTY") == 0 ) {
+        lv_textarea_add_char(keyboard->ta, ' ');
+    }
+    else if(strcmp(txt, "拼音") == 0 ) {
+        lv_textarea_add_char(keyboard->ta, ' ');
+    }
+    else if(strcmp(txt, "符号") == 0 ) {
+        lv_textarea_add_char(keyboard->ta, ' ');
     }
     else if(strcmp(txt, "+/-") == 0) {
         uint16_t cur        = lv_textarea_get_cursor_pos(keyboard->ta);
@@ -362,13 +508,165 @@ void lv_keyboard_def_event_cb(lv_event_t * e)
         }
     }
     else {
-        lv_textarea_add_text(keyboard->ta, txt);
+        if(keyboard->mode == LV_KEYBOARD_MODE_IME_CHN) {
+            lv_keyboard_handle_ime_chn(keyboard, txt);
+        } else {
+            lv_textarea_add_text(keyboard->ta, txt);
+        }
     }
 }
 
 /**********************
  *   STATIC FUNCTIONS
  **********************/
+
+static void lv_keyboard_handle_ime_chn(lv_keyboard_t * keyboard, const char * txt)
+{
+    if(strlen(txt) == 1 && isalpha((unsigned char)*txt)) {
+        // Append letter to pinyin buffer
+        size_t len = strlen(keyboard->pinyin_buf);
+        if(len < sizeof(keyboard->pinyin_buf) - 1) {
+            // If this is the first letter, record start position
+            if(len == 0) {
+                keyboard->pinyin_start_pos = lv_textarea_get_cursor_pos(keyboard->ta);
+            }
+            // Add letter to text area
+            lv_textarea_add_text(keyboard->ta, txt);
+            // Update pinyin buffer
+            keyboard->pinyin_buf[len] = tolower((unsigned char)*txt);
+            keyboard->pinyin_buf[len + 1] = '\0';
+            // Show candidates after adding letter
+            lv_keyboard_show_candidates(keyboard);
+        }
+    } else if(strcmp(txt, " ") == 0) {
+        // Space: convert pinyin and show candidates (if not already shown)
+        lv_keyboard_show_candidates(keyboard);
+    } else if(isdigit((unsigned char)*txt)) {
+        // Number: select candidate
+        int idx = *txt - '0' - 1;  // 1-based to 0-based
+        lv_keyboard_select_candidate(keyboard, idx);
+    } else if(strcmp(txt, LV_SYMBOL_BACKSPACE) == 0) {
+        if(keyboard->pinyin_buf[0] != '\0') {
+            // Delete from pinyin buffer and text area
+            size_t len = strlen(keyboard->pinyin_buf);
+            if(len > 0) {
+                // Delete last character from text area
+                lv_textarea_del_char(keyboard->ta);
+                // Update pinyin buffer
+                keyboard->pinyin_buf[len - 1] = '\0';
+                // Show updated candidates after deleting
+                if(keyboard->pinyin_buf[0] != '\0') {
+                    lv_keyboard_show_candidates(keyboard);
+                } else {
+                    lv_keyboard_clear_candidates(keyboard);
+                }
+            }
+        } else {
+            // Normal backspace
+            lv_textarea_del_char(keyboard->ta);
+        }
+    } else {
+        // Other keys: add directly
+        lv_textarea_add_text(keyboard->ta, txt);
+    }
+}
+
+static void lv_keyboard_show_candidates(lv_keyboard_t * keyboard)
+{
+    if(!keyboard->candidate_list || keyboard->pinyin_buf[0] == '\0') return;
+
+    // Find matching Chinese characters
+    const char * candidates[10] = {0};
+    int count = 0;
+    size_t pinyin_len = strlen(keyboard->pinyin_buf);
+    for(int i = 0; pinyin_dict[i].pinyin != NULL && count < 10; i++) {
+        if(strncmp(pinyin_dict[i].pinyin, keyboard->pinyin_buf, pinyin_len) == 0) {
+            candidates[count++] = pinyin_dict[i].chinese;
+        }
+    }
+
+    if(count == 0) return;
+
+    // Clear previous candidates
+    lv_keyboard_clear_candidates(keyboard);
+
+    // Create button matrix for candidates
+    keyboard->candidate_btnm = lv_btnmatrix_create(keyboard->candidate_list);
+    if(!keyboard->candidate_btnm) return;  // Check if creation failed
+    lv_obj_clear_flag(keyboard->candidate_btnm, LV_OBJ_FLAG_CLICK_FOCUSABLE);
+    lv_obj_set_size(keyboard->candidate_btnm, lv_obj_get_width(keyboard->candidate_list) - 5, lv_obj_get_height(keyboard->candidate_list) - 5);
+    lv_obj_add_event_cb(keyboard->candidate_btnm, lv_keyboard_candidate_event_cb, LV_EVENT_VALUE_CHANGED, keyboard);
+
+    // Set map (NULL terminated)
+    const char ** map = lv_mem_alloc((count + 1) * sizeof(const char *));
+    if(!map) {
+        lv_keyboard_clear_candidates(keyboard);
+        return;
+    }
+    for(int i = 0; i < count; i++) {
+        map[i] = candidates[i];
+    }
+    map[count] = NULL;  // NULL terminate
+    lv_btnmatrix_set_map(keyboard->candidate_btnm, map);
+    /* store count for bounds checking */
+    keyboard->candidate_cnt = (uint8_t)count;
+    keyboard->candidate_map = map;
+}
+
+static void lv_keyboard_clear_candidates(lv_keyboard_t * keyboard)
+{
+    if(keyboard->candidate_btnm) {
+        lv_obj_del(keyboard->candidate_btnm);
+        keyboard->candidate_btnm = NULL;
+    }
+    if(keyboard->candidate_map) {
+        lv_mem_free(keyboard->candidate_map);
+        keyboard->candidate_map = NULL;
+    }
+    keyboard->candidate_cnt = 0;
+}
+
+static void lv_keyboard_select_candidate(lv_keyboard_t * keyboard, int idx)
+{
+    if(!keyboard->candidate_btnm) return;
+    if(idx < 0 || idx >= (int)keyboard->candidate_cnt) return; /* bounds check */
+
+    const char * txt = lv_btnmatrix_get_btn_text(keyboard->candidate_btnm, idx);
+    if(txt && txt[0] != '\0') {
+        // Replace pinyin with Chinese character
+        size_t plen = strlen(keyboard->pinyin_buf);
+        if(plen > 0) {
+            // Move cursor to end of pinyin (start + length)
+            lv_textarea_set_cursor_pos(keyboard->ta, keyboard->pinyin_start_pos + plen);
+            // Delete plen characters (backward)
+            for(size_t i = 0; i < plen; i++) {
+                lv_textarea_del_char(keyboard->ta);
+            }
+            // Insert Chinese character
+            lv_textarea_add_text(keyboard->ta, txt);
+        } else {
+            // Fallback: just add text
+            lv_textarea_add_text(keyboard->ta, txt);
+        }
+        keyboard->pinyin_buf[0] = '\0';  /* Clear pinyin */
+        lv_keyboard_clear_candidates(keyboard);
+    }
+}
+
+static void lv_keyboard_candidate_event_cb(lv_event_t * e)
+{
+    lv_obj_t * btnm = lv_event_get_target(e);
+    void * ud = lv_event_get_user_data(e);
+    if(!ud) return;
+    lv_keyboard_t * keyboard = (lv_keyboard_t *)ud;
+    /* Sanity check: keyboard pointer should be a valid object */
+    if(!keyboard) return;
+    uint16_t btn_id = lv_btnmatrix_get_selected_btn(btnm);
+    if(btn_id != LV_BTNMATRIX_BTN_NONE) {
+        /* Ensure btn_id fits in int and within count */
+        lv_keyboard_select_candidate(keyboard, (int)btn_id);
+    }
+}
 
 static void lv_keyboard_constructor(const lv_obj_class_t * class_p, lv_obj_t * obj)
 {
@@ -379,6 +677,12 @@ static void lv_keyboard_constructor(const lv_obj_class_t * class_p, lv_obj_t * o
     keyboard->ta         = NULL;
     keyboard->mode       = LV_KEYBOARD_MODE_TEXT_LOWER;
     keyboard->popovers   = 0;
+    keyboard->pinyin_buf[0] = '\0';
+    keyboard->candidate_list = NULL;
+    keyboard->candidate_btnm = NULL;
+    keyboard->candidate_cnt = 0;
+    keyboard->candidate_map = NULL;
+    keyboard->pinyin_start_pos = 0;
 
     lv_obj_align(obj, LV_ALIGN_BOTTOM_MID, 0, 0);
     lv_obj_add_event_cb(obj, lv_keyboard_def_event_cb, LV_EVENT_VALUE_CHANGED, NULL);
