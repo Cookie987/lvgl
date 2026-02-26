@@ -62,9 +62,13 @@ typedef struct {
     uint8_t candidate_cnt;      /*Number of candidates currently shown*/
     const char ** candidate_map; /*Dynamically allocated map for candidates*/
     uint16_t pinyin_start_pos;  /*Start position of pinyin in text area*/
+    int candidate_page;         /*Current page for candidates*/
+    int total_candidates;       /*Total number of candidates*/
+    const char ** candidates_list; /*List of all candidates*/
 } lv_keyboard_t;
 
 extern const lv_obj_class_t lv_keyboard_class;
+
 
 /**********************
  * GLOBAL PROTOTYPES
@@ -118,6 +122,8 @@ void lv_keyboard_set_popovers(lv_obj_t * kb, bool en);
  */
 void lv_keyboard_set_map(lv_obj_t * kb, lv_keyboard_mode_t mode, const char * map[],
                          const lv_btnmatrix_ctrl_t ctrl_map[]);
+
+void lv_keyboard_reset_ime(lv_obj_t * obj);
 
 /*=====================
  * Getter functions

@@ -8,6 +8,7 @@
  *      INCLUDES
  *********************/
 #include "lv_keyboard.h"
+#include "lv_ime_dict.h"
 #if LV_USE_KEYBOARD
 
 #include "../../../widgets/lv_textarea.h"
@@ -22,6 +23,7 @@
  *********************/
 #define MY_CLASS    &lv_keyboard_class
 #define LV_KB_BTN(width) LV_BTNMATRIX_CTRL_POPOVER | width
+#define LV_KEYBOARD_MAX_CANDIDATES 100  /* Maximum number of candidate characters to display */
 
 /**********************
  *      TYPEDEFS
@@ -70,46 +72,7 @@ static const lv_btnmatrix_ctrl_t ime_kb_ctrl_chn_map[] = {
     LV_KEYBOARD_CTRL_BTN_FLAGS | 2, LV_KEYBOARD_CTRL_BTN_FLAGS | 2, LV_BTNMATRIX_CTRL_CHECKED | 2, 6, LV_BTNMATRIX_CTRL_CHECKED | 2, LV_KEYBOARD_CTRL_BTN_FLAGS | 2
 };
 
-/* Simple Pinyin to Chinese dictionary - example entries */
-typedef struct {
-    const char * pinyin;
-    const char * chinese;
-} pinyin_entry_t;
 
-static const pinyin_entry_t pinyin_dict[] = {
-    {"ni", "你"},
-    {"ni", "逆"},
-    {"ni", "尼"},
-    {"ni", "泥"},
-    {"hao", "好"},
-    {"shi", "是"},
-    {"shi", "世"},
-    {"jie", "界"},
-    {"wo", "我"},
-    {"ta", "他"},
-    {"she", "她"},
-    {"zai", "在"},
-    {"de", "的"},
-    {"le", "了"},
-    {"yi", "一"},
-    {"bu", "不"},
-    {"ren", "人"},
-    {"dao", "到"},
-    {"lai", "来"},
-    {"gei", "给"},
-    {"zai", "再"},
-    {"wei", "为"},
-    {"er", "而"},
-    {"da", "大"},
-    {"xiao", "小"},
-    {"chu", "出"},
-    {"chu", "初"},
-    {"chu", "楚"},
-    {"chu", "触"},
-    {"chu", "厨"},
-    {"chu", "除"},
-    {NULL, NULL}  // End marker
-};
 
 
 static const char * const default_kb_map_lc[] = {"1#", "q", "w", "e", "r", "t", "y", "u", "i", "o", "p", LV_SYMBOL_BACKSPACE, "\n",
@@ -213,6 +176,18 @@ lv_obj_t * lv_keyboard_create(lv_obj_t * parent)
 /*=====================
  * Setter functions
  *====================*/
+
+void lv_keyboard_reset_ime(lv_obj_t * obj)
+{
+    LV_ASSERT_OBJ(obj, MY_CLASS);
+
+    lv_keyboard_t * keyboard = (lv_keyboard_t *)obj;
+
+    if(keyboard->mode == LV_KEYBOARD_MODE_IME_CHN) {
+        keyboard->pinyin_buf[0] = '\0';
+        lv_keyboard_clear_candidates(keyboard);
+    }
+}
 
 /**
  * Assign a Text Area to the Keyboard. The pressed characters will be put there.
@@ -469,11 +444,10 @@ void lv_keyboard_def_event_cb(lv_event_t * e)
             size_t len = strlen(keyboard->pinyin_buf);
             if(len > 0) {
                 keyboard->pinyin_buf[len - 1] = '\0';
+                lv_keyboard_handle_ime_chn(keyboard, txt);
             }
-            // 因为拼音也显示在了textarea里，所以删除时也要删除textarea里的字符
-            lv_textarea_del_char(keyboard->ta);
-            lv_keyboard_clear_candidates(keyboard);
         } else {
+            lv_keyboard_clear_candidates(keyboard);
             lv_textarea_del_char(keyboard->ta);
         }
     }
@@ -575,42 +549,112 @@ static void lv_keyboard_show_candidates(lv_keyboard_t * keyboard)
 {
     if(!keyboard->candidate_list || keyboard->pinyin_buf[0] == '\0') return;
 
-    // Find matching Chinese characters
-    const char * candidates[10] = {0};
-    int count = 0;
+    // Find matching pinyin entry and extract individual characters from the chinese string
+    const char * chinese_chars = NULL;
     size_t pinyin_len = strlen(keyboard->pinyin_buf);
-    for(int i = 0; pinyin_dict[i].pinyin != NULL && count < 10; i++) {
+    
+    for(int i = 0; pinyin_dict[i].pinyin != NULL; i++) {
         if(strncmp(pinyin_dict[i].pinyin, keyboard->pinyin_buf, pinyin_len) == 0) {
-            candidates[count++] = pinyin_dict[i].chinese;
+            // Prefix match found
+            chinese_chars = pinyin_dict[i].chinese;
+            break;
         }
     }
 
-    if(count == 0) return;
+    if(chinese_chars == NULL || chinese_chars[0] == '\0') return;
 
     // Clear previous candidates
     lv_keyboard_clear_candidates(keyboard);
+
+    // Count and extract individual Chinese characters (max LV_KEYBOARD_MAX_CANDIDATES)
+    int count = 0;
+    int positions[LV_KEYBOARD_MAX_CANDIDATES];  // Store byte position of each character
+    int char_idx = 0;
+    
+    while(chinese_chars[char_idx] != '\0' && count < LV_KEYBOARD_MAX_CANDIDATES) {
+        positions[count] = char_idx;
+        // UTF-8: skip to next character
+        if((unsigned char)chinese_chars[char_idx] >= 0xE0) {
+            char_idx += 3;  // 3-byte UTF-8 character
+        } else if((unsigned char)chinese_chars[char_idx] >= 0xC0) {
+            char_idx += 2;  // 2-byte UTF-8 character
+        } else {
+            char_idx += 1;  // 1-byte ASCII character
+        }
+        count++;
+    }
+
+    if(count == 0) return;
 
     // Create button matrix for candidates
     keyboard->candidate_btnm = lv_btnmatrix_create(keyboard->candidate_list);
     if(!keyboard->candidate_btnm) return;  // Check if creation failed
     lv_obj_clear_flag(keyboard->candidate_btnm, LV_OBJ_FLAG_CLICK_FOCUSABLE);
-    lv_obj_set_size(keyboard->candidate_btnm, lv_obj_get_width(keyboard->candidate_list) - 5, lv_obj_get_height(keyboard->candidate_list) - 5);
+    // 10候选字符需要320px宽度
+    // 计算总体宽度
+    uint16_t buttonmatrix_width = 320 / 10 * count;
+    lv_obj_set_size(keyboard->candidate_btnm, buttonmatrix_width, lv_obj_get_height(keyboard->candidate_list) - 5);
+    lv_obj_add_flag(keyboard->candidate_btnm, LV_OBJ_FLAG_EVENT_BUBBLE);
     lv_obj_add_event_cb(keyboard->candidate_btnm, lv_keyboard_candidate_event_cb, LV_EVENT_VALUE_CHANGED, keyboard);
 
-    // Set map (NULL terminated)
+    // Allocate memory for candidate strings and map
+    // Each candidate can be up to 4 bytes (3 bytes for UTF-8 char + 1 null terminator)
+    char * candidates_buffer = lv_mem_alloc(count * 4 + 1);
     const char ** map = lv_mem_alloc((count + 1) * sizeof(const char *));
-    if(!map) {
+    
+    if(!candidates_buffer || !map) {
+        if(candidates_buffer) lv_mem_free(candidates_buffer);
+        if(map) lv_mem_free(map);
         lv_keyboard_clear_candidates(keyboard);
         return;
     }
+    
+    // Copy each character to the buffer and create string pointers
     for(int i = 0; i < count; i++) {
-        map[i] = candidates[i];
+        int start_pos = positions[i];
+        int end_pos;
+        if(i + 1 < count) {
+            end_pos = positions[i + 1];
+        } else {
+            // For the last character, find where it ends
+            end_pos = start_pos;
+            if((unsigned char)chinese_chars[start_pos] >= 0xE0) {
+                end_pos += 3;  // 3-byte UTF-8 character
+            } else if((unsigned char)chinese_chars[start_pos] >= 0xC0) {
+                end_pos += 2;  // 2-byte UTF-8 character
+            } else {
+                end_pos += 1;  // 1-byte ASCII character
+            }
+        }
+        int char_len = end_pos - start_pos;
+        
+        char * dest = &candidates_buffer[i * 4];
+        map[i] = dest;
+        
+        for(int j = 0; j < char_len && j < 3; j++) {
+            dest[j] = chinese_chars[start_pos + j];
+        }
+        dest[char_len] = '\0';
     }
     map[count] = NULL;  // NULL terminate
+    
     lv_btnmatrix_set_map(keyboard->candidate_btnm, map);
+    
+    // Set control map to make buttons trigger on click instead of release
+    lv_btnmatrix_ctrl_t * ctrl_map = lv_mem_alloc((count + 1) * sizeof(lv_btnmatrix_ctrl_t));
+    if(ctrl_map) {
+        for(int i = 0; i < count; i++) {
+            ctrl_map[i] = LV_BTNMATRIX_CTRL_CLICK_TRIG;
+        }
+        ctrl_map[count] = 0;  // NULL terminator
+        lv_btnmatrix_set_ctrl_map(keyboard->candidate_btnm, ctrl_map);
+        lv_mem_free(ctrl_map);
+    }
+    
     /* store count for bounds checking */
     keyboard->candidate_cnt = (uint8_t)count;
     keyboard->candidate_map = map;
+    keyboard->candidates_list = (const char **)candidates_buffer;  // Store for cleanup
 }
 
 static void lv_keyboard_clear_candidates(lv_keyboard_t * keyboard)
@@ -622,6 +666,10 @@ static void lv_keyboard_clear_candidates(lv_keyboard_t * keyboard)
     if(keyboard->candidate_map) {
         lv_mem_free(keyboard->candidate_map);
         keyboard->candidate_map = NULL;
+    }
+    if(keyboard->candidates_list) {
+        lv_mem_free(keyboard->candidates_list);
+        keyboard->candidates_list = NULL;
     }
     keyboard->candidate_cnt = 0;
 }
