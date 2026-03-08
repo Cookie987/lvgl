@@ -25,8 +25,8 @@ ime使用方法：
 ```c++
 lv_obj_t * kb = keyboard_message_input;
 lv_keyboard_set_mode(kb, LV_KEYBOARD_MODE_IME_CHN);
-lv_obj_t * list = id(obj_message_candidate_list); // lv_obj, core widget
-lv_keyboard_set_candidate_list(kb, list);
+lv_obj_t * obj_list = obj; // lv_obj, core widget
+lv_keyboard_set_candidate_list(kb, obj_list);
 ```
 
 ---
