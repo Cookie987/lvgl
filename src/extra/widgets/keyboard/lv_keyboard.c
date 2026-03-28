@@ -439,14 +439,10 @@ void lv_keyboard_def_event_cb(lv_event_t * e)
         lv_textarea_cursor_right(keyboard->ta);
     }
     else if(strcmp(txt, LV_SYMBOL_BACKSPACE) == 0) {
-        if(keyboard->mode == LV_KEYBOARD_MODE_IME_CHN && keyboard->pinyin_buf[0] != '\0') {
-            // Delete from pinyin buffer
-            size_t len = strlen(keyboard->pinyin_buf);
-            if(len > 0) {
-                keyboard->pinyin_buf[len - 1] = '\0';
-                lv_keyboard_handle_ime_chn(keyboard, txt);
-            }
-        } else {
+        if(keyboard->mode == LV_KEYBOARD_MODE_IME_CHN) {
+            lv_keyboard_handle_ime_chn(keyboard, txt);
+        }
+        else {
             lv_keyboard_clear_candidates(keyboard);
             lv_textarea_del_char(keyboard->ta);
         }
