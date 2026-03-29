@@ -1,6 +1,6 @@
 {
 	"name": "lvgl-c",
-	"version": "8.4.2",
+	"version": "8.4.3",
 	"keywords": "graphics, gui, embedded, tft, lvgl",
 	"description": "LVGL改版，尝试解决中文输入法问题。",
 	"repository": {
