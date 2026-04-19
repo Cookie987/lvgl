@@ -36,6 +36,7 @@ typedef enum {
     LV_KEYBOARD_MODE_USER_2,
     LV_KEYBOARD_MODE_USER_3,
     LV_KEYBOARD_MODE_USER_4,
+    LV_KEYBOARD_MODE_IME_CHN,
 #if LV_USE_ARABIC_PERSIAN_CHARS == 1
     LV_KEYBOARD_MODE_TEXT_ARABIC
 #endif
@@ -83,6 +84,13 @@ void lv_keyboard_set_textarea(lv_obj_t * kb, lv_obj_t * ta);
 void lv_keyboard_set_mode(lv_obj_t * kb, lv_keyboard_mode_t mode);
 
 /**
+ * Set the candidate list container used by the built-in Chinese IME mode.
+ * @param kb        pointer to a keyboard object
+ * @param list      pointer to a container object for candidate buttons
+ */
+void lv_keyboard_set_candidate_list(lv_obj_t * kb, lv_obj_t * list);
+
+/**
  * Enable or disable popovers showing button titles on press.
  * @param kb        pointer to a keyboard object
  * @param en        true to enable popovers; false to disable
@@ -100,6 +108,12 @@ void lv_keyboard_set_popovers(lv_obj_t * kb, bool en);
  */
 void lv_keyboard_set_map(lv_obj_t * kb, lv_keyboard_mode_t mode, const char * const map[],
                          const lv_buttonmatrix_ctrl_t ctrl_map[]);
+
+/**
+ * Clear the current IME composition and candidate state.
+ * @param obj       pointer to a keyboard object
+ */
+void lv_keyboard_reset_ime(lv_obj_t * obj);
 
 /*=====================
  * Getter functions
