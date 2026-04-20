@@ -685,6 +685,9 @@ static bool lv_keyboard_handle_common_key(lv_obj_t * obj, lv_keyboard_t * keyboa
 
 static bool lv_keyboard_handle_textarea_key(lv_keyboard_t * keyboard, const char * txt)
 {
+    if(strcmp(txt, "符号" == 0) || strcmp(txt, "拼音") == 0 || strcmp(txt, "QWERTY") == 0) {
+        lv_textarea_add_char(keyboard->ta, ' ');
+    }
     if(strcmp(txt, "Enter") == 0 || strcmp(txt, LV_SYMBOL_NEW_LINE) == 0) {
         if(keyboard->mode == LV_KEYBOARD_MODE_IME_CHN && lv_keyboard_ime_has_composition(keyboard)) {
             lv_keyboard_ime_reset(keyboard, true);
