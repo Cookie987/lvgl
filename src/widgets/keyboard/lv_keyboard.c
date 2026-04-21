@@ -199,6 +199,7 @@ const lv_obj_class_t lv_keyboard_class = {
 static lv_keyboard_trie_t pinyin_trie;
 static lv_keyboard_trie_t phrase_pinyin_trie;
 static lv_keyboard_trie_t phrase_initials_trie;
+static const char * const ime_candidate_empty_map[] = {""};
 
 static const char * const ime_chn_kb_map[] = {
     "1#", "q", "w", "e", "r", "t", "y", "u", "i", "o", "p", LV_SYMBOL_BACKSPACE, "\n",
@@ -988,6 +989,18 @@ static void lv_keyboard_ime_release_map(lv_keyboard_t * keyboard)
 
 static void lv_keyboard_ime_release_candidates(lv_keyboard_t * keyboard)
 {
+    if(keyboard == NULL) {
+        return;
+    }
+
+    /* Detach the live buttonmatrix from dynamic candidate strings before freeing them.
+     * Otherwise the next redraw can dereference stale text pointers from map_p. */
+    if(keyboard->candidate_btnm && lv_obj_is_valid(keyboard->candidate_btnm)) {
+        lv_buttonmatrix_set_map(keyboard->candidate_btnm, ime_candidate_empty_map);
+        lv_obj_add_flag(keyboard->candidate_btnm, LV_OBJ_FLAG_HIDDEN);
+        lv_buttonmatrix_set_selected_button(keyboard->candidate_btnm, LV_BUTTONMATRIX_BUTTON_NONE);
+    }
+
     lv_keyboard_ime_release_map(keyboard);
 
     if(keyboard->candidates_list) {
