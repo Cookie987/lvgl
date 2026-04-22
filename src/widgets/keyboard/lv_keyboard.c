@@ -678,7 +678,7 @@ static bool lv_keyboard_handle_common_key(lv_obj_t * obj, lv_keyboard_t * keyboa
     }
 
     if(strcmp(txt, LV_SYMBOL_OK) == 0) {
-        return lv_keyboard_commit_ready(obj, keyboard);
+        return lv_keyboard_commit_cancel(obj, keyboard);
     }
 
     return false;
