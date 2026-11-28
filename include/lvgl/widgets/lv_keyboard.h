@@ -36,6 +36,10 @@ typedef enum {
     LV_KEYBOARD_MODE_USER_2,
     LV_KEYBOARD_MODE_USER_3,
     LV_KEYBOARD_MODE_USER_4,
+    /**Pinyin input. The pinyin being composed is mirrored into the assigned text
+     *area and the candidates are shown in the list set by
+     *`lv_keyboard_set_candidate_list()`.*/
+    LV_KEYBOARD_MODE_IME_CHN,
 #if LV_USE_ARABIC_PERSIAN_CHARS == 1
     LV_KEYBOARD_MODE_TEXT_ARABIC
 #endif
@@ -82,6 +86,25 @@ void lv_keyboard_set_textarea(lv_obj_t * obj, lv_obj_t * ta);
  * @param mode      the desired mode (see 'lv_keyboard_mode_t')
  */
 void lv_keyboard_set_mode(lv_obj_t * obj, lv_keyboard_mode_t mode);
+
+/**
+ * Set the container the Chinese IME mode shows its candidate buttons in.
+ * The keyboard creates its own button matrix inside it the first time there is
+ * something to show, and deletes that matrix when the list is replaced, cleared
+ * or deleted. The container is not touched otherwise, so it can be shared with
+ * other content as long as nothing else adds children to it while composing.
+ * @param obj       pointer to a keyboard object
+ * @param list      pointer to a container object, or NULL to detach
+ */
+void lv_keyboard_set_candidate_list(lv_obj_t * obj, lv_obj_t * list);
+
+/**
+ * Drop the Chinese IME composition and its candidates, leaving the composed
+ * pinyin in the text area as-is. Does nothing unless the keyboard is in
+ * `LV_KEYBOARD_MODE_IME_CHN`.
+ * @param obj       pointer to a keyboard object
+ */
+void lv_keyboard_reset_ime(lv_obj_t * obj);
 
 /**
  * Enable or disable popovers showing button titles on press.
